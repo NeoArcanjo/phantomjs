@@ -79,18 +79,14 @@ def activate_colorization(options):
         _COLORS = _COLOR_ON
     elif options.color == "never":
         _COLORS = _COLOR_NONE
-    else:
-        if sys.stdout.isatty() and platform.system() != "Windows":
-            try:
-                n = int(subprocess.check_output(["tput", "colors"]))
-                if n >= 8:
-                    _COLORS = _COLOR_ON
-                else:
-                    _COLORS = _COLOR_BOLD
-            except subprocess.CalledProcessError:
-                _COLORS = _COLOR_NONE
-        else:
+    elif sys.stdout.isatty() and platform.system() != "Windows":
+        try:
+            n = int(subprocess.check_output(["tput", "colors"]))
+            _COLORS = _COLOR_ON if n >= 8 else _COLOR_BOLD
+        except subprocess.CalledProcessError:
             _COLORS = _COLOR_NONE
+    else:
+        _COLORS = _COLOR_NONE
 
 def colorize(color, message):
     return _COLORS[color] + message + _COLORS["_"]
@@ -131,12 +127,12 @@ class ResponseHookImporter(object):
         # All Python response hooks, no matter how deep below www_path,
         # are treated as direct children of the fake "test_www" package.
         if 'test_www' not in sys.modules:
-            imp.load_source('test_www', www_path + '/__init__.py')
+            imp.load_source('test_www', f'{www_path}/__init__.py')
 
         self.tr = string.maketrans('-./%', '____')
 
     def __call__(self, path):
-        modname = 'test_www.' + path.translate(self.tr)
+        modname = f'test_www.{path.translate(self.tr)}'
         try:
             return sys.modules[modname]
         except KeyError:
@@ -180,11 +176,7 @@ def do_call_subprocess(command, verbose, stdin_data, timeout):
         def start(self): pass
         def join(self):  pass
 
-    if stdin_data:
-        stdin = subprocess.PIPE
-    else:
-        stdin = devnull
-
+    stdin = subprocess.PIPE if stdin_data else devnull
     proc = subprocess.Popen(command,
                             stdin=stdin,
                             stdout=subprocess.PIPE,
@@ -290,13 +282,13 @@ class FileHandler(SimpleHTTPServer.SimpleHTTPRequestHandler, object):
         if os.path.exists(path):
             return super(FileHandler, self).send_head()
 
-        py = path + '.py'
+        py = f'{path}.py'
         if os.path.exists(py):
             try:
                 mod = self.get_response_hook(py)
                 return mod.handle_request(self)
             except:
-                self.send_error(500, 'Internal Server Error in '+py)
+                self.send_error(500, f'Internal Server Error in {py}')
                 raise
 
         self.send_error(404, 'File not found')
@@ -399,25 +391,25 @@ class HTTPTestServer(object):
 
         self.httpd  = TCPServer(False, handler,
                                 self.base_path, self.signal_error)
-        os.environ['TEST_HTTP_BASE'] = \
-            'http://localhost:{}/'.format(self.httpd.server_address[1])
+        os.environ[
+            'TEST_HTTP_BASE'
+        ] = f'http://localhost:{self.httpd.server_address[1]}/'
         httpd_thread = threading.Thread(target=self.httpd.serve_forever)
         httpd_thread.daemon = True
         httpd_thread.start()
         if self.verbose >= 3:
-            sys.stdout.write("## HTTP server at {}\n".format(
-                os.environ['TEST_HTTP_BASE']))
+            sys.stdout.write(f"## HTTP server at {os.environ['TEST_HTTP_BASE']}\n")
 
         self.httpsd = TCPServer(True, handler,
                                 self.base_path, self.signal_error)
-        os.environ['TEST_HTTPS_BASE'] = \
-            'https://localhost:{}/'.format(self.httpsd.server_address[1])
+        os.environ[
+            'TEST_HTTPS_BASE'
+        ] = f'https://localhost:{self.httpsd.server_address[1]}/'
         httpsd_thread = threading.Thread(target=self.httpsd.serve_forever)
         httpsd_thread.daemon = True
         httpsd_thread.start()
         if self.verbose >= 3:
-            sys.stdout.write("## HTTPS server at {}\n".format(
-                os.environ['TEST_HTTPS_BASE']))
+            sys.stdout.write(f"## HTTPS server at {os.environ['TEST_HTTPS_BASE']}\n")
 
         return self
 
@@ -471,7 +463,7 @@ class TestDetail(object):
                                           self.message[0]))
             lo = 1
         for line in self.message[lo:]:
-            fp.write("  {}\n".format(colorize("b", line)))
+            fp.write(f'  {colorize("b", line)}\n')
 
 class TestGroup(object):
     """Holds the result of one group of tests (that is, one .js file),
@@ -505,25 +497,27 @@ class TestGroup(object):
                 self.add_error([],
                     "PhantomJS exited successfully when test failed")
 
-        # Exit code -15 indicates a timeout.
-        elif rc == 1 or rc == -15:
+        elif rc in [1, -15]:
             if self.is_successful():
                 self.add_error([], "PhantomJS exited unsuccessfully")
 
         elif rc >= 2:
-            self.add_error([], "PhantomJS exited with code {}".format(rc))
+            self.add_error([], f"PhantomJS exited with code {rc}")
         else:
-            self.add_error([], "PhantomJS killed by signal {}".format(-rc))
+            self.add_error([], f"PhantomJS killed by signal {-rc}")
 
     def is_successful(self):
         return self.n[T.FAIL] + self.n[T.XPASS] + self.n[T.ERROR] == 0
 
     def worst_code(self):
-        # worst-to-best ordering
-        for code in (T.ERROR, T.FAIL, T.XPASS, T.SKIP, T.XFAIL, T.PASS):
-            if self.n[code] > 0:
-                return code
-        return T.PASS
+        return next(
+            (
+                code
+                for code in (T.ERROR, T.FAIL, T.XPASS, T.SKIP, T.XFAIL, T.PASS)
+                if self.n[code] > 0
+            ),
+            T.PASS,
+        )
 
     def one_char_summary(self, fp):
         code = self.worst_code()
@@ -532,8 +526,7 @@ class TestGroup(object):
 
     def line_summary(self, fp):
         code = self.worst_code()
-        fp.write("{}: {}\n".format(colorize("^", self.name),
-                                   colorize(code.color, code.label)))
+        fp.write(f'{colorize("^", self.name)}: {colorize(code.color, code.label)}\n')
 
     def report(self, fp, show_all):
         self.line_summary(fp)
@@ -573,8 +566,7 @@ class ExpectTestGroup(TestGroup):
         self.parse_output("stdout", self.stdout_exp, out, self.stdout_xfail)
         self.parse_output("stderr", self.stderr_exp, err, self.stderr_xfail)
 
-        exit_msg = ["expected exit code {} got {}"
-                    .format(self.rc_exp, rc)]
+        exit_msg = [f"expected exit code {self.rc_exp} got {rc}"]
 
         if rc != self.rc_exp:
             exit_desc = "did not exit as expected"
@@ -599,18 +591,22 @@ class ExpectTestGroup(TestGroup):
             if i < le: e = exp[i]
             if i < lg: g = got[i]
             if e != g:
-                diff.extend(("{}: line {} not as expected".format(what, i+1),
-                             "-" + repr(e)[1:-1],
-                             "+" + repr(g)[1:-1]))
+                diff.extend(
+                    (
+                        f"{what}: line {i + 1} not as expected",
+                        f"-{repr(e)[1:-1]}",
+                        f"+{repr(g)[1:-1]}",
+                    )
+                )
 
         if diff:
-            desc = what + " not as expected"
+            desc = f"{what} not as expected"
             if xfail:
                 self.add_xfail(diff, desc)
             else:
                 self.add_fail(diff, desc)
         else:
-            desc = what + " as expected"
+            desc = f"{what} as expected"
             if xfail:
                 self.add_xpass(diff, desc)
             else:
@@ -694,26 +690,20 @@ class TAPTestGroup(TestGroup):
 
         for i in range(i+1, len(out)):
             line = out[i]
-            m = self.diag_r.match(line)
-            if m:
+            if m := self.diag_r.match(line):
                 if not m.group(1):
                     messages.append(m.group(2))
                 continue
-            m = self.test_r.match(line)
-            if m:
+            if m := self.test_r.match(line):
                 status = m.group(1)
                 point  = m.group(2)
                 desc   = m.group(3)
                 dirv   = m.group(4)
 
-                if point:
-                    point = int(point)
-                else:
-                    point = prev_point + 1
-
+                point = int(point) if point else prev_point + 1
                 if point in points_already_used:
                     # A reused test point is an error.
-                    self.add_error(messages, desc + " [test point repeated]")
+                    self.add_error(messages, f"{desc} [test point repeated]")
                 else:
                     points_already_used.add(point)
                     # A point above the plan limit is an automatic *fail*.
@@ -729,16 +719,13 @@ class TAPTestGroup(TestGroup):
                         elif dirv == "SKIP":
                             self.add_skip(messages, desc)
                         else:
-                            self.add_error(messages, desc +
-                                " [ok, with invalid directive "+dirv+"]")
+                            self.add_error(messages, f"{desc} [ok, with invalid directive {dirv}]")
+                    elif not dirv:
+                        self.add_fail(messages, desc)
+                    elif dirv == "TODO":
+                        self.add_xfail(messages, desc)
                     else:
-                        if not dirv:
-                            self.add_fail(messages, desc)
-                        elif dirv == "TODO":
-                            self.add_xfail(messages, desc)
-                        else:
-                            self.add_error(messages, desc +
-                                " [not ok, with invalid directive "+dirv+"]")
+                        self.add_error(messages, f"{desc} [not ok, with invalid directive {dirv}]")
 
                 del messages[:]
                 prev_point = point
@@ -759,7 +746,7 @@ class TAPTestGroup(TestGroup):
         # Any missing test points are fails.
         for pt in range(1, max_point+1):
             if pt not in points_already_used:
-                self.add_fail([], "test {} did not report status".format(pt))
+                self.add_fail([], f"test {pt} did not report status")
 
 class TestRunner(object):
     def __init__(self, base_path, phantomjs_exe, options):
@@ -815,7 +802,7 @@ class TestRunner(object):
         elif debugger == "valgrind":
             return ["valgrind", self.phantomjs_exe]
         else:
-            raise RuntimeError("Don't know how to invoke " + self.debugger)
+            raise RuntimeError(f"Don't know how to invoke {self.debugger}")
 
     def run_phantomjs(self, script,
                       script_args=[], pjs_args=[], stdin_data=[],
@@ -831,20 +818,19 @@ class TestRunner(object):
         command.extend(pjs_args)
         command.append(script)
         if verbose:
-            command.append('--verbose={}'.format(verbose))
+            command.append(f'--verbose={verbose}')
         command.extend(script_args)
 
         if verbose >= 3:
-            sys.stdout.write("## running {}\n".format(" ".join(command)))
+            sys.stdout.write(f'## running {" ".join(command)}\n')
 
-        if debugger:
-            # FIXME: input-feed mode doesn't work with a debugger,
-            # because how do you tell the debugger that the *debuggee*
-            # needs to read from a pipe?
-            subprocess.call(command)
-            return 0, [], []
-        else:
+        if not debugger:
             return do_call_subprocess(command, verbose, stdin_data, timeout)
+        # FIXME: input-feed mode doesn't work with a debugger,
+        # because how do you tell the debugger that the *debuggee*
+        # needs to read from a pipe?
+        subprocess.call(command)
+        return 0, [], []
 
     def run_test(self, script, name):
         script_args = []
@@ -862,7 +848,7 @@ class TestRunner(object):
 
         def require_args(what, i, tokens):
             if i+1 == len(tokens):
-                raise ValueError(what + "directive requires an argument")
+                raise ValueError(f"{what}directive requires an argument")
 
         if self.verbose >= 3:
             sys.stdout.write(colorize("^", name) + ":\n")
@@ -921,7 +907,7 @@ class TestRunner(object):
                             stderr_exp.append(" ".join(tokens[(i+1):]))
                             break
                         else:
-                            raise ValueError("unrecognized directive: " + tok)
+                            raise ValueError(f"unrecognized directive: {tok}")
 
         except Exception as e:
             grp = TestGroup(name)
@@ -938,7 +924,7 @@ class TestRunner(object):
             script = self.harness
 
         if use_snakeoil:
-            pjs_args.insert(0, '--ssl-certificates-path=' + self.cert_path)
+            pjs_args.insert(0, f'--ssl-certificates-path={self.cert_path}')
 
         rc, out, err = self.run_phantomjs(script, script_args, pjs_args,
                                           stdin_data, timeout)
@@ -1004,20 +990,16 @@ class TestRunner(object):
             if n[s]:
                 sys.stdout.write(" {:>4} {}\n".format(n[s], s.long_label))
 
-        if n[T.FAIL] == 0 and n[T.XPASS] == 0 and n[T.ERROR] == 0:
-            return 0
-        else:
-            return 1
+        return 0 if n[T.FAIL] == 0 and n[T.XPASS] == 0 and n[T.ERROR] == 0 else 1
 
 def init():
     base_path = os.path.normpath(os.path.dirname(os.path.abspath(__file__)))
 
-    phantomjs_exe = os.path.normpath(base_path + '/../bin/phantomjs')
+    phantomjs_exe = os.path.normpath(f'{base_path}/../bin/phantomjs')
     if sys.platform in ('win32', 'cygwin'):
         phantomjs_exe += '.exe'
     if not os.path.isfile(phantomjs_exe):
-        sys.stdout.write("{} is unavailable, cannot run tests.\n"
-                         .format(phantomjs_exe))
+        sys.stdout.write(f"{phantomjs_exe} is unavailable, cannot run tests.\n")
         sys.exit(1)
 
     parser = argparse.ArgumentParser(description='Run PhantomJS tests.')
@@ -1040,13 +1022,13 @@ def init():
         if rc != 0 or len(ver) != 1 or len(err) != 0:
             sys.stdout.write(colorize("R", "FATAL")+": Version check failed\n")
             for l in ver:
-                sys.stdout.write(colorize("b", "## " + l) + "\n")
+                sys.stdout.write(colorize("b", f"## {l}") + "\n")
             for l in err:
-                sys.stdout.write(colorize("b", "## " + l) + "\n")
-            sys.stdout.write(colorize("b", "## exit {}".format(rc)) + "\n")
+                sys.stdout.write(colorize("b", f"## {l}") + "\n")
+            sys.stdout.write(colorize("b", f"## exit {rc}") + "\n")
             sys.exit(1)
 
-        sys.stdout.write(colorize("b", "## Testing PhantomJS "+ver[0])+"\n")
+        sys.stdout.write(colorize("b", f"## Testing PhantomJS {ver[0]}") + "\n")
 
     return runner
 
@@ -1063,7 +1045,7 @@ def main():
         # there will be a blank line at the end of 'trace'
         sys.stdout.write(colorize("R", "FATAL") + ": " + trace[-2] + "\n")
         for line in trace[:-2]:
-            sys.stdout.write(colorize("b", "## " + line) + "\n")
+            sys.stdout.write(colorize("b", f"## {line}") + "\n")
 
         sys.exit(1)
 

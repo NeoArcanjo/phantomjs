@@ -17,29 +17,29 @@ def handle_request(req):
                 if status is not None:
                     raise ValueError("status can only be specified once")
                 status = int(value)
-            elif key == 'Content-Type' or key == 'Content-Length':
-                raise ValueError("cannot override " + key)
+            elif key in ['Content-Type', 'Content-Length']:
+                raise ValueError(f"cannot override {key}")
             else:
                 headers.append((key, value))
 
         if status is None:
             status = 200
 
-        body = "<!doctype html><h1>Status: {}</h1>".format(status)
+        body = f"<!doctype html><h1>Status: {status}</h1>"
         if headers:
             body += "<pre>"
             for key, value in headers:
-                body += html_esc("{}: {}\n".format(key, value))
+                body += html_esc(f"{key}: {value}\n")
             body += "</pre>"
 
     except Exception as e:
         try:
             status = int(url.query)
-            body = "<!doctype html><h1>Status: {}</h1>".format(status)
+            body = f"<!doctype html><h1>Status: {status}</h1>"
         except:
             status = 400
             body = "<!doctype html><h1>Status: 400</h1>"
-            body += "<pre>" + html_esc(str(e)) + "</pre>"
+            body += f"<pre>{html_esc(str(e))}</pre>"
 
     req.send_response(status)
     req.send_header('Content-Type', 'text/html')
