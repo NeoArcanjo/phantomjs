@@ -4,10 +4,7 @@ import cStringIO as StringIO
 
 def handle_request(req):
     url = urlparse.urlparse(req.path)
-    headers = {}
-    for name, value in req.headers.items():
-        headers[name] = value.rstrip()
-
+    headers = {name: value.rstrip() for name, value in req.headers.items()}
     d = dict(
         command  = req.command,
         version  = req.protocol_version,

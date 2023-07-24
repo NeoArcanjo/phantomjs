@@ -18,9 +18,12 @@ def do_response(req, body, code=200, headers={}):
     return StringIO(body)
 
 def do_redirect(req, target):
-    return do_response(req,
-        '<!doctype html><a href="{}">Go here</a>'.format(target),
-        code=302, headers={ 'Location': target })
+    return do_response(
+        req,
+        f'<!doctype html><a href="{target}">Go here</a>',
+        code=302,
+        headers={'Location': target},
+    )
 
 def handle_request(req):
     url = urlparse.urlparse(req.path)
@@ -78,8 +81,8 @@ def handle_request(req):
         return do_response(req, '', code=204)
 
     else:
-        return do_response(req,
-            '<!doctype html><title>404 Not Found</title>'
-            '<p>URL not found: {}</p>'
-            .format(html_esc(req.path)),
-            code=404)
+        return do_response(
+            req,
+            f'<!doctype html><title>404 Not Found</title><p>URL not found: {html_esc(req.path)}</p>',
+            code=404,
+        )

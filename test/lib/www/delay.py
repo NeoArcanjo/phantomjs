@@ -7,7 +7,7 @@ def handle_request(req):
     delay = float(int(url.query))
     time.sleep(delay / 1000) # argument is in milliseconds
 
-    body = "OK ({}ms delayed)\n".format(delay)
+    body = f"OK ({delay}ms delayed)\n"
     req.send_response(200)
     req.send_header('Content-Type', 'text/plain')
     req.send_header('Content-Length', str(len(body)))
